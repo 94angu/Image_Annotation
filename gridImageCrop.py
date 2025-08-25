@@ -7,13 +7,23 @@ import os
 import sys
 from datetime import datetime
 from screeninfo import get_monitors
+import yaml
 
-# Grid config
-grid_rows, grid_cols = 6, 6
+# Load configuration
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
 MAX_DISPLAY_WIDTH = 1600
 MAX_DISPLAY_HEIGHT = 900
-input_folder = "input_images"
-base_output_folder = "cropped_grids"
+
+grid_rows = config["grid"]["rows"]
+grid_cols = config["grid"]["cols"]
+input_folder = config["input_folder"]
+base_output_folder = config["base_output_folder"]
+
+print("Grid:", grid_rows, "x", grid_cols)
+print("Input folder:", input_folder)
+print("Output folder:", base_output_folder)
 
 # Create a timestamped session folder
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -21,15 +31,21 @@ session_folder = os.path.join(base_output_folder, f"session_{timestamp}")
 os.makedirs(session_folder, exist_ok=True)
 
 # Subfolders for labels
-label_colors = {"healthy": (0, 255, 0), "damaged": (0, 0, 255)}
+label_colors = {label: tuple(color) for label, color in config["labels"].items()}
+
 for label in label_colors:
     os.makedirs(os.path.join(session_folder, label), exist_ok=True)
+
+label_keys = {label[0].lower(): label for label in label_colors.keys()}
+
+print("Loaded labels:", label_colors)
+print("Key mappings:", label_keys)
 
 # Globals
 selected_cells = {}  # {cell_index: label}
 current_label = None
 cell_coords = []
-saved_crops = {"healthy": 0, "damaged": 0}
+saved_crops = {label: 0 for label in label_colors}
 
 def draw_grid(image, img_name, img_index, total_images):
     global display_scale
@@ -53,8 +69,10 @@ def draw_grid(image, img_name, img_index, total_images):
     count = 0
 
     # Instructions bar
-    instructions = "[h] Healthy   [d] Damaged   [Click] Select/Toggle   [s] Save   [q] Skip   [x] Exit"
+    label_instr = "   ".join([f"[{k}] {lbl.capitalize()}" for k, lbl in label_keys.items()])
+    instructions = f"{label_instr}   [Click] Select/Toggle   [s] Save   [q] Skip   [x] Exit"
     image_info = f"Image {img_index + 1} of {total_images}  |  File: {img_name}"
+
     cv2.rectangle(img_copy, (0, 0), (img_copy.shape[1], 30), (50, 50, 50), -1)
     cv2.putText(img_copy, instructions, (10, 22),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
@@ -150,26 +168,25 @@ for index, file in enumerate(image_files):
         cv2.imshow("Image Grid", display)
         key = cv2.waitKey(10) & 0xFF
 
-        if key == ord('h'):
-            current_label = 'healthy'
-            print("Current label: healthy")
-        elif key == ord('d'):
-            current_label = 'damaged'
-            print("Current label: damaged")
-        elif key == ord('s'):
-            save_selected_cells(img, img_name)
-            print(f"Saved {len(selected_cells)} crops.")
-            break
-        elif key == ord('q'):
-            print("Skipped image.")
-            break
-        elif key == ord('x'):
-            save_selected_cells(img, img_name)
-            print(f"Saved {len(selected_cells)} crops before exit.")
-            cv2.waitKey(1)
-            cv2.destroyAllWindows()
-            print("Exited program. Crops saved to session folder.")
-            sys.exit()
+        if key != 255:  # Some key pressed
+            char_key = chr(key).lower()
+            if char_key in label_keys:
+                current_label = label_keys[char_key]
+                print(f"Current label: {current_label}")
+            elif key == ord('s'):
+                save_selected_cells(img, img_name)
+                print(f"Saved {len(selected_cells)} crops.")
+                break
+            elif key == ord('q'):
+                print("Skipped image.")
+                break
+            elif key == ord('x'):
+                save_selected_cells(img, img_name)
+                print(f"Saved {len(selected_cells)} crops before exit.")
+                cv2.waitKey(1)
+                cv2.destroyAllWindows()
+                print("Exited program. Crops saved to session folder.")
+                sys.exit()
 
 # Final clean-up at the end
 cv2.waitKey(1)

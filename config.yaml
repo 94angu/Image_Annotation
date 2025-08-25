@@ -1,0 +1,13 @@
+#Master configuration file
+
+grid:
+  rows: 6
+  cols: 6
+
+input_folder: input_images
+base_output_folder: cropped_grids
+
+labels:
+  healthy: [0,255,0]
+  damaged: [0,0,255]
+
